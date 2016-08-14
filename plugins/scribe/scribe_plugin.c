@@ -25,7 +25,6 @@ ssize_t uwsgi_scribe_logger(struct uwsgi_logger *ul, char *message, size_t len) 
   int portn;
 
   LogEntry *entry;
-  ResultCode rc;
   GPtrArray *messages = g_ptr_array_new();
   GError *error = NULL;
 
@@ -83,19 +82,24 @@ ssize_t uwsgi_scribe_logger(struct uwsgi_logger *ul, char *message, size_t len) 
 			   "input_protocol",  uscribelog->protocol,
 			   "output_protocol", uscribelog->protocol,
 			   NULL);
+
+    ul->buf = uwsgi_malloc(uwsgi.log_master_bufsize);
     ul->configured = 1;
   }
+
+  memcpy(ul->buf, message, len);
+  ul->buf[len] = '\0';
 
   entry = g_object_new(TYPE_LOG_ENTRY, NULL);
 
   g_object_set(entry,
 	       "category", uscribelog->topic,
-	       "message", message,
+	       "message", ul->buf,
 	       NULL);
 
   g_ptr_array_add(messages, entry);
 
-  scribe_if_log(uscribelog->client, &rc, messages, &error);
+  scribe_client_send_log(uscribelog->client, messages, &error);
   if (error) {
     uwsgi_log_safe(error->message);
     exit(1);
@@ -105,14 +109,6 @@ ssize_t uwsgi_scribe_logger(struct uwsgi_logger *ul, char *message, size_t len) 
   g_object_unref(entry);
   g_ptr_array_unref(messages);
 
-  /*
-  thrift_transport_close (uscribelog->transport, NULL);
-
-  g_object_unref (uscribelog->client);
-  g_object_unref (uscribelog->protocol);
-  g_object_unref (uscribelog->transport);
-  g_object_unref (uscribelog->socket);
-  */
   return exit_status;
 }
 
